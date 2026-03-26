@@ -1,0 +1,12 @@
+{
+  "domain": "homecast",
+  "name": "Homecast",
+  "codeowners": ["@parob"],
+  "config_flow": true,
+  "dependencies": ["application_credentials"],
+  "documentation": "https://docs.homecast.cloud/guides/developers/home-assistant",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "requirements": ["aiohttp>=3.9.0"],
+  "version": "0.1.0"
+}
