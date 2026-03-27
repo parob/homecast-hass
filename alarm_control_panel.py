@@ -9,12 +9,10 @@ from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntityFeature,
     AlarmControlPanelState,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import HomecastCoordinator
+from . import HomecastConfigEntry
 from .entity import HomecastEntity
 
 # Homecast alarm_state -> HA state
@@ -29,11 +27,11 @@ _ALARM_STATE_MAP: dict[str, AlarmControlPanelState] = {
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HomecastConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Homecast alarm control panels."""
-    coordinator: HomecastCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator = entry.runtime_data.coordinator
 
     entities = []
     if coordinator.data:

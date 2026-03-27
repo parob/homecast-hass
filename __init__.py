@@ -2,83 +2,99 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_entry_oauth2_flow
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.device_registry import DeviceInfo
+from pyhomecast import (
+    HomecastAuthError,
+    HomecastClient,
+    HomecastConnectionError,
+    HomecastState,
+)
 
-from .api import HomecastApiClient
-from .const import DOMAIN, PLATFORMS
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    OAuth2TokenRequestError,
+    OAuth2TokenRequestReauthError,
+)
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    OAuth2Session,
+    async_get_config_entry_implementation,
+)
+
+from .const import API_BASE_URL, DOMAIN
 from .coordinator import HomecastCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-type HomecastConfigEntry = ConfigEntry
+PLATFORMS = [
+    Platform.ALARM_CONTROL_PANEL,
+    Platform.BINARY_SENSOR,
+    Platform.CLIMATE,
+    Platform.COVER,
+    Platform.FAN,
+    Platform.LIGHT,
+    Platform.LOCK,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
+
+
+@dataclass
+class HomecastData:
+    """Runtime data for a Homecast config entry."""
+
+    coordinator: HomecastCoordinator
+    client: HomecastClient
+
+
+type HomecastConfigEntry = ConfigEntry[HomecastData]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> bool:
     """Set up Homecast from a config entry."""
-    implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(
-        hass, entry
-    )
-    oauth_session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
+    implementation = await async_get_config_entry_implementation(hass, entry)
+    session = OAuth2Session(hass, entry, implementation)
 
-    # Ensure token is valid
-    await oauth_session.async_ensure_token_valid()
-    token = oauth_session.token["access_token"]
+    try:
+        await session.async_ensure_token_valid()
+    except OAuth2TokenRequestReauthError as err:
+        raise ConfigEntryAuthFailed from err
+    except OAuth2TokenRequestError as err:
+        raise ConfigEntryNotReady from err
 
-    session = async_get_clientsession(hass)
-    api = HomecastApiClient(session, token)
+    client = HomecastClient(session=async_get_clientsession(hass), api_url=API_BASE_URL)
+    client.authenticate(session.token[CONF_ACCESS_TOKEN])
 
-    coordinator = HomecastCoordinator(hass, api)
-    await coordinator.async_config_entry_first_refresh()
+    async def _refresh_token() -> None:
+        await session.async_ensure_token_valid()
+        client.authenticate(session.token[CONF_ACCESS_TOKEN])
 
-    # Register hub devices for each home
-    device_registry = hass.helpers.device_registry.async_get(hass)
-    if coordinator.data:
-        for home_key, home_name in coordinator.data.homes.items():
-            device_registry.async_get_or_create(
-                config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, home_key)},
-                name=home_name,
-                manufacturer="Homecast",
-                model="HomeKit Bridge",
-            )
+    coordinator = HomecastCoordinator(hass, client, _refresh_token)
 
-    # Store coordinator and session for platforms and token refresh
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        "coordinator": coordinator,
-        "oauth_session": oauth_session,
-        "api": api,
-    }
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryAuthFailed:
+        raise
+    except Exception as err:
+        raise ConfigEntryNotReady(
+            f"Could not fetch initial state from Homecast: {err}"
+        ) from err
 
-    # Set up a listener to refresh the API token when it changes
-    entry.async_on_unload(
-        entry.add_update_listener(_async_update_listener)
+    entry.runtime_data = HomecastData(
+        coordinator=coordinator,
+        client=client,
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
-async def _async_update_listener(
-    hass: HomeAssistant, entry: HomecastConfigEntry
-) -> None:
-    """Handle config entry updates (token refresh)."""
-    data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    if data:
-        oauth_session: config_entry_oauth2_flow.OAuth2Session = data["oauth_session"]
-        await oauth_session.async_ensure_token_valid()
-        api: HomecastApiClient = data["api"]
-        api.set_token(oauth_session.token["access_token"])
-
-
 async def async_unload_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> bool:
     """Unload a Homecast config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

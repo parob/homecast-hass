@@ -5,22 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import HomecastCoordinator
+from . import HomecastConfigEntry
 from .entity import HomecastEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HomecastConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Homecast fans."""
-    coordinator: HomecastCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator = entry.runtime_data.coordinator
 
     entities = []
     if coordinator.data:

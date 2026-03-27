@@ -10,12 +10,13 @@
       }
     },
     "abort": {
-      "already_configured": "Homecast is already configured.",
+      "already_configured": "This account is already configured.",
       "already_in_progress": "Configuration flow is already in progress.",
-      "cannot_connect": "Could not connect to Homecast. Please check your relay is online.",
-      "unknown": "An unexpected error occurred.",
-      "oauth_error": "OAuth authentication failed.",
-      "reauth_successful": "Re-authentication successful."
+      "cannot_connect": "Failed to connect.",
+      "invalid_auth": "Invalid authentication.",
+      "unknown": "Unexpected error.",
+      "oauth_error": "Error logging in with OAuth.",
+      "reauth_successful": "Re-authentication was successful."
     },
     "create_entry": {
       "default": "Connected to Homecast. Your HomeKit devices will appear shortly."

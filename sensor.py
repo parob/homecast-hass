@@ -7,15 +7,14 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from . import HomecastConfigEntry
 from .coordinator import HomecastCoordinator
 from .entity import HomecastEntity
-from .models import HomecastDevice
+from pyhomecast import HomecastDevice
 
 # Device types that are dedicated sensors
 _SENSOR_TYPES = {"temperature", "light_sensor"}
@@ -23,11 +22,11 @@ _SENSOR_TYPES = {"temperature", "light_sensor"}
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HomecastConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Homecast sensors."""
-    coordinator: HomecastCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator = entry.runtime_data.coordinator
 
     entities: list[SensorEntity] = []
     if coordinator.data:
@@ -83,7 +82,7 @@ class HomecastBatterySensor(HomecastEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_entity_category = "diagnostic"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,

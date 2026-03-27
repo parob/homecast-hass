@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from pyhomecast import HomecastDevice
+
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import HomecastCoordinator
-from .models import HomecastDevice
 
 
 class HomecastEntity(CoordinatorEntity[HomecastCoordinator]):
@@ -22,16 +23,27 @@ class HomecastEntity(CoordinatorEntity[HomecastCoordinator]):
         coordinator: HomecastCoordinator,
         device: HomecastDevice,
     ) -> None:
+        """Initialize the entity."""
         super().__init__(coordinator)
         self._device_id = device.unique_id
         self._attr_unique_id = device.unique_id
+
+        # Prefix room name with home name when there are multiple homes
+        multiple_homes = (
+            coordinator.data is not None and len(coordinator.data.homes) > 1
+        )
+        area = (
+            f"{device.home_name} - {device.room_name}"
+            if multiple_homes
+            else device.room_name
+        )
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device.unique_id)},
             name=device.name,
             manufacturer="Homecast (HomeKit)",
             model=device.device_type.replace("_", " ").title(),
-            suggested_area=device.room_name,
-            via_device=(DOMAIN, device.home_key),
+            suggested_area=area,
         )
 
     @property

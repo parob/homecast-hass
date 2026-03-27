@@ -6,23 +6,23 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from . import HomecastConfigEntry
 from .coordinator import HomecastCoordinator
 from .entity import HomecastEntity
-from .models import HomecastDevice
+from pyhomecast import HomecastDevice
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HomecastConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Homecast binary sensors."""
-    coordinator: HomecastCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator = entry.runtime_data.coordinator
 
     entities: list[BinarySensorEntity] = []
     if coordinator.data:
@@ -93,7 +93,7 @@ class HomecastLowBatterySensor(HomecastEntity, BinarySensorEntity):
     """Low battery binary sensor (companion to any device)."""
 
     _attr_device_class = BinarySensorDeviceClass.BATTERY
-    _attr_entity_category = "diagnostic"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
