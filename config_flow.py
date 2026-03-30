@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from typing import Any
 
 from pyhomecast import HomecastAuthError, HomecastClient, HomecastConnectionError
 
+from homeassistant.components.application_credentials import (
+    ClientCredential,
+    async_import_client_credential,
+)
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigFlowResult
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2FlowHandler
 
-from .const import API_BASE_URL, DOMAIN, SCOPES
+from .const import API_BASE_URL, DOMAIN, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, SCOPES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,8 +37,19 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
         """Extra data to include in the authorize URL."""
         return {"scope": SCOPES}
 
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle a flow start — auto-import OAuth credentials."""
+        await async_import_client_credential(
+            self.hass,
+            DOMAIN,
+            ClientCredential(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET),
+        )
+        return await super().async_step_user(user_input)
+
     async def async_step_reauth(
-        self, entry_data: dict[str, Any]
+        self, entry_data: Mapping[str, Any]
     ) -> ConfigFlowResult:
         """Handle re-authentication."""
         return await self.async_step_reauth_confirm()
@@ -46,9 +62,7 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
             return self.async_show_form(step_id="reauth_confirm")
         return await self.async_step_user()
 
-    async def async_oauth_create_entry(
-        self, data: dict[str, Any]
-    ) -> ConfigFlowResult:
+    async def async_oauth_create_entry(self, data: dict[str, Any]) -> ConfigFlowResult:
         """Create an entry after OAuth flow completes."""
         token = data[CONF_TOKEN][CONF_ACCESS_TOKEN]
         client = HomecastClient(

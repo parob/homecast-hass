@@ -5,15 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 
-from pyhomecast import (
-    HomecastAuthError,
-    HomecastClient,
-    HomecastConnectionError,
-    HomecastState,
-)
+from pyhomecast import HomecastClient, HomecastWebSocket
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN, Platform
+from homeassistant.const import CONF_ACCESS_TOKEN, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -27,7 +22,7 @@ from homeassistant.helpers.config_entry_oauth2_flow import (
     async_get_config_entry_implementation,
 )
 
-from .const import API_BASE_URL, DOMAIN
+from .const import API_BASE_URL, DOMAIN as DOMAIN
 from .coordinator import HomecastCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,14 +63,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> 
     except OAuth2TokenRequestError as err:
         raise ConfigEntryNotReady from err
 
-    client = HomecastClient(session=async_get_clientsession(hass), api_url=API_BASE_URL)
+    http_session = async_get_clientsession(hass)
+    client = HomecastClient(session=http_session, api_url=API_BASE_URL)
     client.authenticate(session.token[CONF_ACCESS_TOKEN])
+
+    # Create WebSocket client for push updates
+    device_id = f"ha_{entry.entry_id[:12]}"
+    ws = HomecastWebSocket(
+        session=http_session, api_url=API_BASE_URL, device_id=device_id
+    )
 
     async def _refresh_token() -> None:
         await session.async_ensure_token_valid()
-        client.authenticate(session.token[CONF_ACCESS_TOKEN])
+        token = session.token[CONF_ACCESS_TOKEN]
+        client.authenticate(token)
+        ws.set_token(token)
 
-    coordinator = HomecastCoordinator(hass, client, _refresh_token)
+    coordinator = HomecastCoordinator(hass, entry, client, _refresh_token, ws=ws)
 
     try:
         await coordinator.async_config_entry_first_refresh()
@@ -85,6 +89,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> 
         raise ConfigEntryNotReady(
             f"Could not fetch initial state from Homecast: {err}"
         ) from err
+
+    # Start WebSocket after initial state is available
+    await coordinator.async_setup_websocket()
 
     entry.runtime_data = HomecastData(
         coordinator=coordinator,

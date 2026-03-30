@@ -12,7 +12,7 @@ from homeassistant.components.light import (
     LightEntity,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import HomecastConfigEntry
 from .entity import HomecastEntity
@@ -27,17 +27,16 @@ MAX_KELVIN = round(1_000_000 / MIN_MIREK)  # 7143
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: HomecastConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Homecast lights."""
     coordinator = entry.runtime_data.coordinator
 
-    entities = []
-    if coordinator.data:
-        for device in coordinator.data.devices.values():
-            if device.device_type == "light":
-                entities.append(HomecastLight(coordinator, device))
-    async_add_entities(entities)
+    async_add_entities(
+        HomecastLight(coordinator, device)
+        for device in (coordinator.data.devices.values() if coordinator.data else [])
+        if device.device_type == "light"
+    )
 
 
 class HomecastLight(HomecastEntity, LightEntity):
@@ -80,6 +79,7 @@ class HomecastLight(HomecastEntity, LightEntity):
 
     @property
     def is_on(self) -> bool | None:
+        """Return true if the light is on."""
         device = self.device
         if device is None:
             return None
@@ -98,6 +98,7 @@ class HomecastLight(HomecastEntity, LightEntity):
 
     @property
     def hs_color(self) -> tuple[float, float] | None:
+        """Return the hue and saturation color value."""
         device = self.device
         if device is None:
             return None
@@ -109,6 +110,7 @@ class HomecastLight(HomecastEntity, LightEntity):
 
     @property
     def color_temp_kelvin(self) -> int | None:
+        """Return the color temperature in Kelvin."""
         device = self.device
         if device is None:
             return None
@@ -119,13 +121,16 @@ class HomecastLight(HomecastEntity, LightEntity):
 
     @property
     def min_color_temp_kelvin(self) -> int:
+        """Return the minimum color temperature in Kelvin."""
         return MIN_KELVIN
 
     @property
     def max_color_temp_kelvin(self) -> int:
+        """Return the maximum color temperature in Kelvin."""
         return MAX_KELVIN
 
     async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on the light."""
         payload: dict[str, Any] = {"on": True}
         if ATTR_BRIGHTNESS in kwargs:
             payload["brightness"] = round(kwargs[ATTR_BRIGHTNESS] / 255 * 100)
@@ -137,4 +142,5 @@ class HomecastLight(HomecastEntity, LightEntity):
         await self._async_set_state(payload)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off the light."""
         await self._async_set_state({"on": False})
