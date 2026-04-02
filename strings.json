@@ -1,6 +1,20 @@
 {
   "config": {
     "step": {
+      "user": {
+        "title": "Connect to Homecast",
+        "menu_options": {
+          "cloud": "Homecast Cloud",
+          "community": "Homecast Community (local Mac)"
+        }
+      },
+      "community": {
+        "title": "Connect to Homecast Community",
+        "description": "Enter your Homecast server URL. You'll be asked to log in on your server.",
+        "data": {
+          "api_url": "Server URL"
+        }
+      },
       "pick_implementation": {
         "title": "Connect to Homecast"
       },

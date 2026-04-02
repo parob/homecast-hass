@@ -1,8 +1,23 @@
 {
   "config": {
     "step": {
+      "user": {
+        "title": "Connect to Homecast",
+        "menu_options": {
+          "cloud": "Homecast Cloud",
+          "community": "Homecast Community (local Mac)"
+        }
+      },
+      "community": {
+        "title": "Connect to Homecast Community",
+        "description": "Enter the URL and API token from your Homecast Mac app. You can create an API token in Settings > API Tokens.",
+        "data": {
+          "api_url": "Server URL",
+          "api_token": "API Token"
+        }
+      },
       "pick_implementation": {
-        "title": "Connect to Homecast"
+        "title": "Connect to Homecast Cloud"
       },
       "reauth_confirm": {
         "title": "Re-authenticate with Homecast",

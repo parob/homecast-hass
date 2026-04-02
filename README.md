@@ -39,7 +39,7 @@ Homecast acts as a bridge between Apple HomeKit and open standards. The Homecast
 
 ### Manual
 
-1. Copy the `custom_components/homecast` directory to your Home Assistant `config/custom_components/` directory
+1. Copy this repository's contents to your Home Assistant `config/custom_components/homecast/` directory
 2. Restart Home Assistant
 
 ## Setup
@@ -121,8 +121,6 @@ This integration follows Home Assistant's [integration development guidelines](h
 | `__init__.py` | Integration setup, coordinator creation |
 | `config_flow.py` | OAuth 2.1 config flow with PKCE |
 | `coordinator.py` | DataUpdateCoordinator (polls REST API) |
-| `api.py` | Async REST client for Homecast API |
-| `models.py` | Data models and state parsing |
 | `entity.py` | Base entity with shared device info and state commands |
 | `light.py`, `switch.py`, etc. | Platform-specific entity implementations |
 
