@@ -11,6 +11,7 @@ from pyhomecast import (
     HomecastAuthError,
     HomecastClient,
     HomecastConnectionError,
+    HomecastError,
     HomecastState,
     HomecastWebSocket,
 )
@@ -197,7 +198,12 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
     async def async_set_state(self, updates: dict[str, Any]) -> None:
         """Send a state update and request a refresh."""
         await self._refresh_token()
-        await self.client.set_state(updates)
+        try:
+            await self.client.set_state(updates)
+        except HomecastAuthError as err:
+            raise ConfigEntryAuthFailed from err
+        except HomecastError as err:
+            _LOGGER.error("Failed to control device: %s", err)
         await self.async_request_refresh()
 
     async def async_shutdown(self) -> None:

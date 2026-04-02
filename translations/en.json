@@ -10,14 +10,13 @@
       },
       "community": {
         "title": "Connect to Homecast Community",
-        "description": "Enter the URL and API token from your Homecast Mac app. You can create an API token in Settings > API Tokens.",
+        "description": "Enter your Homecast server URL. You'll be asked to log in on your server.",
         "data": {
-          "api_url": "Server URL",
-          "api_token": "API Token"
+          "api_url": "Server URL"
         }
       },
       "pick_implementation": {
-        "title": "Connect to Homecast Cloud"
+        "title": "Connect to Homecast"
       },
       "reauth_confirm": {
         "title": "Re-authenticate with Homecast",

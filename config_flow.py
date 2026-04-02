@@ -129,7 +129,7 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_API_URL, default="http://homecast.local:5656"
+                        CONF_API_URL, default="http://localhost:5656"
                     ): str,
                 }
             ),
