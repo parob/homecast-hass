@@ -73,11 +73,25 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
     async def async_step_cloud(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Cloud mode — OAuth flow with pre-registered credentials."""
+        """Cloud mode — dynamically register OAuth credentials."""
+        client = HomecastClient(
+            session=async_get_clientsession(self.hass), api_url=API_BASE_URL
+        )
+        try:
+            result = await client.register_client(
+                redirect_uri="https://my.home-assistant.io/redirect/oauth"
+            )
+        except (HomecastConnectionError, HomecastAuthError) as err:
+            _LOGGER.error("Failed to register OAuth client: %s", err)
+            return self.async_abort(reason="cannot_connect")
+
         await async_import_client_credential(
             self.hass,
             DOMAIN,
-            ClientCredential(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET),
+            ClientCredential(
+                result["client_id"],
+                result.get("client_secret", ""),
+            ),
         )
         return await super().async_step_user(user_input)
 
