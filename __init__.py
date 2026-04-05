@@ -90,13 +90,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> 
     client = HomecastClient(session=http_session, api_url=api_url)
     client.authenticate(session.token[CONF_ACCESS_TOKEN])
 
-    # WebSocket push updates — cloud only (community uses polling)
-    ws = None
-    if mode != MODE_COMMUNITY:
-        device_id = f"ha_{entry.entry_id[:12]}"
-        ws = HomecastWebSocket(
-            session=http_session, api_url=api_url, device_id=device_id
-        )
+    # WebSocket push updates for real-time state sync
+    device_id = f"ha_{entry.entry_id[:12]}"
+    ws = HomecastWebSocket(
+        session=http_session,
+        api_url=api_url,
+        device_id=device_id,
+        community=(mode == MODE_COMMUNITY),
+    )
 
     async def _refresh_token() -> None:
         await session.async_ensure_token_valid()
@@ -116,9 +117,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> 
             f"Could not fetch initial state from Homecast: {err}"
         ) from err
 
-    # Start WebSocket after initial state is available (cloud only)
-    if ws:
-        await coordinator.async_setup_websocket()
+    # Start WebSocket after initial state is available
+    await coordinator.async_setup_websocket()
 
     entry.runtime_data = HomecastData(coordinator=coordinator, client=client)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

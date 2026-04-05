@@ -5,7 +5,7 @@
         "title": "Connect to Homecast",
         "menu_options": {
           "cloud": "Homecast Cloud",
-          "community": "Homecast Community (local Mac)"
+          "community": "Homecast Community"
         }
       },
       "community": {

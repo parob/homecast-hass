@@ -221,5 +221,5 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
         if self._community_data:
             data.update(self._community_data)
 
-        title = "Homecast (Community)" if mode == MODE_COMMUNITY else "Homecast"
+        title = "Homecast Community" if mode == MODE_COMMUNITY else "Homecast"
         return self.async_create_entry(title=title, data=data)

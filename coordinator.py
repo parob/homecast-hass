@@ -92,9 +92,13 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
             _LOGGER.warning("WebSocket connection failed, using polling: %s", err)
             return
 
-        # Subscribe to all homes
+        # Subscribe to all homes using full UUIDs (cloud server matches on these)
         if self.data and self.data.homes:
-            await self._ws.subscribe(list(self.data.homes.keys()))
+            home_ids = [
+                h.home_id if h.home_id else h.key
+                for h in self.data.homes.values()
+            ]
+            await self._ws.subscribe(home_ids)
 
         # Build UUID-suffix to device key mapping
         self._build_uuid_mapping()
@@ -132,9 +136,13 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
     def _on_ws_message(self, message: dict[str, Any]) -> None:
         """Handle an incoming WebSocket broadcast message."""
         msg_type = message.get("type", "")
+        _LOGGER.debug("WS broadcast: type=%s acc=%s char=%s", msg_type, str(message.get("accessoryId", "?"))[:8], message.get("characteristicType", "?"))
 
         if msg_type == "characteristic_update":
             self._apply_characteristic_update(message)
+        elif msg_type == "service_group_update":
+            # Apply the update to the group device
+            self._apply_service_group_update(message)
         elif msg_type == "reachability_update":
             # Trigger a full refresh to update availability
             self.hass.async_create_task(self.async_request_refresh())
@@ -166,6 +174,60 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
 
         value = message.get("value")
         device.state[state_key] = value
+
+        # If this accessory is a member of a group, also update the group
+        if self.data.member_to_group:
+            group_key = self.data.member_to_group.get(device_key)
+            if group_key:
+                group_device = self.data.devices.get(group_key)
+                if group_device and state_key in ("on", "active"):
+                    # Group is on if ANY member is on
+                    member_keys = self.data.group_members.get(group_key, [])
+                    any_on = any(
+                        self.data.devices.get(mk, device).state.get(state_key, False)
+                        for mk in member_keys
+                    )
+                    group_device.state[state_key] = any_on
+                elif group_device:
+                    group_device.state[state_key] = value
+
+        self.async_set_updated_data(self.data)
+
+    def _apply_service_group_update(self, message: dict[str, Any]) -> None:
+        """Apply a service group update to the group device."""
+        if not self.data:
+            return
+
+        group_id = message.get("groupId")
+        if not group_id:
+            return
+
+        # Find the group device by UUID suffix matching
+        home_id = message.get("homeId")
+        device_key = self._resolve_device_key(home_id, group_id)
+        if not device_key:
+            return
+
+        device = self.data.devices.get(device_key)
+        if not device:
+            return
+
+        char_type = message.get("characteristicType", "")
+        state_key = CHAR_TO_STATE_KEY.get(char_type)
+        if not state_key:
+            return
+
+        value = message.get("value")
+        device.state[state_key] = value
+
+        # Also update all member accessories in the group
+        if self.data.group_members:
+            member_keys = self.data.group_members.get(device_key, [])
+            for member_key in member_keys:
+                member = self.data.devices.get(member_key)
+                if member:
+                    member.state[state_key] = value
+
         self.async_set_updated_data(self.data)
 
     async def _async_update_data(self) -> HomecastState:
@@ -173,6 +235,10 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
         try:
             await self._refresh_token()
             state = await self.client.get_state()
+            _LOGGER.debug("Fetched: %d homes, %d devices", len(state.homes), len(state.devices))
+            if len(state.devices) == 0 and self.data and len(self.data.devices) > 0:
+                _LOGGER.warning("Got 0 devices but had %d — keeping previous data", len(self.data.devices))
+                return self.data
         except HomecastAuthError as err:
             raise ConfigEntryAuthFailed from err
         except HomecastConnectionError as err:
@@ -204,7 +270,6 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
             raise ConfigEntryAuthFailed from err
         except HomecastError as err:
             _LOGGER.error("Failed to control device: %s", err)
-        await self.async_request_refresh()
 
     async def async_shutdown(self) -> None:
         """Disconnect WebSocket on shutdown."""
