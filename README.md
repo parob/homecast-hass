@@ -21,9 +21,10 @@ Homecast acts as a bridge between Apple HomeKit and open standards. The Homecast
 
 ## Prerequisites
 
-- A [Homecast](https://homecast.cloud) account
 - The Homecast Mac or iOS app running on your home network as a relay
-- Home Assistant 2024.1.0 or newer
+- **Cloud mode:** a [Homecast](https://homecast.cloud) account, or
+- **Community mode:** the Homecast app's local server enabled (no account needed)
+- Home Assistant 2026.4.0 or newer
 - [HACS](https://hacs.xyz/) (Home Assistant Community Store)
 
 ## Installation
@@ -39,17 +40,16 @@ Homecast acts as a bridge between Apple HomeKit and open standards. The Homecast
 
 ### Manual
 
-1. Copy this repository's contents to your Home Assistant `config/custom_components/homecast/` directory
+1. Copy this repository's `custom_components/homecast/` directory into your Home Assistant `config/custom_components/` directory
 2. Restart Home Assistant
 
 ## Setup
 
 1. Go to **Settings** > **Devices & Services** > **Add Integration**
 2. Search for **Homecast**
-3. You'll be redirected to the Homecast OAuth consent screen
-4. Log in to your Homecast account and authorize Home Assistant
-5. Select which homes to share and the permission level (view or control)
-6. Your HomeKit devices will appear in Home Assistant automatically, organized by room
+3. Choose **Cloud** (homecast.cloud account) or **Community** (local Homecast server on your network)
+4. **Cloud:** log in and authorize Home Assistant on the consent screen, selecting which homes to share and the permission level (view or control). **Community:** enter your Homecast server URL (e.g. `http://your-mac.local:5656`)
+5. Your HomeKit devices will appear in Home Assistant automatically, organized by room
 
 No manual OAuth client registration is needed — the integration registers itself automatically.
 
@@ -81,7 +81,7 @@ No manual OAuth client registration is needed — the integration registers itse
 
 ## Configuration
 
-The integration uses cloud polling to keep device state in sync. The default polling interval is **30 seconds**.
+State updates arrive in real time over a WebSocket connection. A safety-net poll every **5 minutes** keeps state in sync if the WebSocket is interrupted.
 
 ### View-only access
 
@@ -102,9 +102,9 @@ If you authorized Home Assistant with view-only permissions during OAuth setup, 
 
 ### Stale state
 
-- State updates every 30 seconds via polling
-- For immediate feedback after controlling a device, the integration triggers an extra refresh
-- WebSocket push updates for real-time state are planned for a future release
+- State changes are pushed over WebSocket within a few seconds
+- A full refresh runs every 5 minutes as a safety net
+- If state seems stuck, check that the relay app is online
 
 ### Re-authentication
 
@@ -120,7 +120,7 @@ This integration follows Home Assistant's [integration development guidelines](h
 |---|---|
 | `__init__.py` | Integration setup, coordinator creation |
 | `config_flow.py` | OAuth 2.1 config flow with PKCE |
-| `coordinator.py` | DataUpdateCoordinator (polls REST API) |
+| `coordinator.py` | DataUpdateCoordinator (WebSocket push + safety-net polling) |
 | `entity.py` | Base entity with shared device info and state commands |
 | `light.py`, `switch.py`, etc. | Platform-specific entity implementations |
 
@@ -128,8 +128,9 @@ This integration follows Home Assistant's [integration development guidelines](h
 
 The integration communicates with Homecast via:
 
-- **`GET /rest/state`** — Fetch all device state (polling)
+- **`GET /rest/state`** — Fetch all device state (initial load + safety-net polling)
 - **`POST /rest/state`** — Send control commands
+- **WebSocket** — Real-time state push (`characteristic_update`, `service_group_update`)
 - **`POST /rest/scene`** — Execute scenes (future)
 - **OAuth 2.1** — Authentication with PKCE and refresh tokens
 

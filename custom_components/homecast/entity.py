@@ -29,9 +29,7 @@ class HomecastEntity(CoordinatorEntity[HomecastCoordinator]):
         self._attr_unique_id = device.unique_id
 
         # Prefix room name with home name when there are multiple homes
-        multiple_homes = (
-            coordinator.data is not None and len(coordinator.data.homes) > 1
-        )
+        multiple_homes = len(coordinator.data.homes) > 1
         area = (
             f"{device.home_name} - {device.room_name}"
             if multiple_homes
@@ -49,8 +47,6 @@ class HomecastEntity(CoordinatorEntity[HomecastCoordinator]):
     @property
     def device(self) -> HomecastDevice | None:
         """Return the current device data from the coordinator."""
-        if self.coordinator.data is None:
-            return None
         return self.coordinator.data.devices.get(self._device_id)
 
     @property

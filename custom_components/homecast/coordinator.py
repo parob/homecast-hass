@@ -61,8 +61,9 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
         hass: HomeAssistant,
         entry: ConfigEntry,
         client: HomecastClient,
-        refresh_token: Callable[[], Coroutine[Any, Any, None]],
+        refresh_token: Callable[[], Coroutine[Any, Any, str]],
         ws: HomecastWebSocket | None = None,
+        initial_token: str | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -75,6 +76,7 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
         self.client = client
         self._refresh_token = refresh_token
         self._ws = ws
+        self._current_token: str | None = initial_token
         self._uuid_to_device: dict[str, str] = {}
 
     async def async_setup_websocket(self) -> None:
@@ -85,20 +87,15 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
         self._ws.set_callback(self._on_ws_message)
 
         try:
-            token = self.client._token  # noqa: SLF001
-            if token:
-                await self._ws.connect(token)
+            if self._current_token:
+                await self._ws.connect(self._current_token)
         except (HomecastAuthError, HomecastConnectionError) as err:
             _LOGGER.warning("WebSocket connection failed, using polling: %s", err)
             return
 
-        # Subscribe to all homes using full UUIDs (cloud server matches on these)
+        # Subscribe to all homes
         if self.data and self.data.homes:
-            home_ids = [
-                h.home_id if h.home_id else h.key
-                for h in self.data.homes.values()
-            ]
-            await self._ws.subscribe(home_ids)
+            await self._ws.subscribe(list(self.data.homes.keys()))
 
         # Build UUID-suffix to device key mapping
         self._build_uuid_mapping()
@@ -114,8 +111,6 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
         pyhomecast uses slug keys ending with the last 4 chars of the UUID.
         This mapping allows fast lookup from broadcast data.
         """
-        if not self.data:
-            return
         self._uuid_to_device.clear()
         for unique_id, device in self.data.devices.items():
             # accessory_key is like "ceiling_light_c3d4" — last 4 chars are UUID suffix
@@ -124,121 +119,86 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
             key = f"{home_suffix}:{acc_suffix}"
             self._uuid_to_device[key] = unique_id
 
-    def _resolve_device_key(
-        self, home_id: str | None, accessory_id: str | None
-    ) -> str | None:
+    def _resolve_device_key(self, home_id: str, accessory_id: str) -> str | None:
         """Resolve a broadcast's homeId + accessoryId to a device unique_id."""
-        if not home_id or not accessory_id:
-            return None
         key = f"{home_id[-4:].lower()}:{accessory_id[-4:].lower()}"
         return self._uuid_to_device.get(key)
 
     def _on_ws_message(self, message: dict[str, Any]) -> None:
         """Handle an incoming WebSocket broadcast message."""
         msg_type = message.get("type", "")
-        _LOGGER.debug("WS broadcast: type=%s acc=%s char=%s", msg_type, str(message.get("accessoryId", "?"))[:8], message.get("characteristicType", "?"))
 
         if msg_type == "characteristic_update":
-            self._apply_characteristic_update(message)
+            device_key = self._apply_state_update(
+                message.get("homeId"),
+                message.get("accessoryId"),
+                message.get("characteristicType", ""),
+                message.get("value"),
+            )
+            # If this accessory is a member of a service group, propagate
+            # the state change to the group entity too
+            if device_key and self.data:
+                group_key = self.data.member_to_group.get(device_key)
+                if group_key:
+                    group = self.data.devices.get(group_key)
+                    if group:
+                        char_type = message.get("characteristicType", "")
+                        state_key = CHAR_TO_STATE_KEY.get(char_type)
+                        if state_key:
+                            group.state[state_key] = message.get("value")
+                            self.async_set_updated_data(self.data)
         elif msg_type == "service_group_update":
-            # Apply the update to the group device
-            self._apply_service_group_update(message)
+            # Update the group entity itself
+            self._apply_state_update(
+                message.get("homeId"),
+                message.get("groupId"),
+                message.get("characteristicType", ""),
+                message.get("value"),
+            )
+            # Group toggles also change all member accessories — full refresh
+            # to pick up their new states
+            self.hass.async_create_task(self.async_request_refresh())
         elif msg_type == "reachability_update":
-            # Trigger a full refresh to update availability
             self.hass.async_create_task(self.async_request_refresh())
         elif msg_type == "relay_status_update":
-            connected = message.get("connected", True)
-            if not connected:
-                # Relay went offline — full resync
+            if not message.get("connected", True):
                 self.hass.async_create_task(self.async_request_refresh())
 
-    def _apply_characteristic_update(self, message: dict[str, Any]) -> None:
-        """Apply an incremental characteristic update to the in-memory state."""
-        if not self.data:
-            return
+    def _apply_state_update(
+        self,
+        home_id: str | None,
+        entity_id: str | None,
+        char_type: str,
+        value: Any,
+    ) -> str | None:
+        """Apply an incremental state update from a WS broadcast.
 
-        device_key = self._resolve_device_key(
-            message.get("homeId"), message.get("accessoryId")
-        )
+        Returns the device key if the update was applied, or None.
+        """
+        if not self.data or not home_id or not entity_id:
+            return None
+
+        device_key = self._resolve_device_key(home_id, entity_id)
         if not device_key:
-            return
+            return None
 
         device = self.data.devices.get(device_key)
         if not device:
-            return
+            return None
 
-        char_type = message.get("characteristicType", "")
         state_key = CHAR_TO_STATE_KEY.get(char_type)
         if not state_key:
-            return
+            return None
 
-        value = message.get("value")
         device.state[state_key] = value
-
-        # If this accessory is a member of a group, also update the group
-        if self.data.member_to_group:
-            group_key = self.data.member_to_group.get(device_key)
-            if group_key:
-                group_device = self.data.devices.get(group_key)
-                if group_device and state_key in ("on", "active"):
-                    # Group is on if ANY member is on
-                    member_keys = self.data.group_members.get(group_key, [])
-                    any_on = any(
-                        self.data.devices.get(mk, device).state.get(state_key, False)
-                        for mk in member_keys
-                    )
-                    group_device.state[state_key] = any_on
-                elif group_device:
-                    group_device.state[state_key] = value
-
         self.async_set_updated_data(self.data)
-
-    def _apply_service_group_update(self, message: dict[str, Any]) -> None:
-        """Apply a service group update to the group device."""
-        if not self.data:
-            return
-
-        group_id = message.get("groupId")
-        if not group_id:
-            return
-
-        # Find the group device by UUID suffix matching
-        home_id = message.get("homeId")
-        device_key = self._resolve_device_key(home_id, group_id)
-        if not device_key:
-            return
-
-        device = self.data.devices.get(device_key)
-        if not device:
-            return
-
-        char_type = message.get("characteristicType", "")
-        state_key = CHAR_TO_STATE_KEY.get(char_type)
-        if not state_key:
-            return
-
-        value = message.get("value")
-        device.state[state_key] = value
-
-        # Also update all member accessories in the group
-        if self.data.group_members:
-            member_keys = self.data.group_members.get(device_key, [])
-            for member_key in member_keys:
-                member = self.data.devices.get(member_key)
-                if member:
-                    member.state[state_key] = value
-
-        self.async_set_updated_data(self.data)
+        return device_key
 
     async def _async_update_data(self) -> HomecastState:
         """Fetch state from the Homecast API."""
         try:
-            await self._refresh_token()
+            self._current_token = await self._refresh_token()
             state = await self.client.get_state()
-            _LOGGER.debug("Fetched: %d homes, %d devices", len(state.homes), len(state.devices))
-            if len(state.devices) == 0 and self.data and len(self.data.devices) > 0:
-                _LOGGER.warning("Got 0 devices but had %d — keeping previous data", len(self.data.devices))
-                return self.data
         except HomecastAuthError as err:
             raise ConfigEntryAuthFailed from err
         except HomecastConnectionError as err:
@@ -256,20 +216,21 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
         self._build_uuid_mapping()
 
         # Update WS token in case it was refreshed
-        if self._ws and self.client._token:  # noqa: SLF001
-            self._ws.set_token(self.client._token)  # noqa: SLF001
+        if self._ws and self._current_token:
+            self._ws.set_token(self._current_token)
 
         return state
 
     async def async_set_state(self, updates: dict[str, Any]) -> None:
         """Send a state update and request a refresh."""
-        await self._refresh_token()
+        self._current_token = await self._refresh_token()
         try:
             await self.client.set_state(updates)
         except HomecastAuthError as err:
             raise ConfigEntryAuthFailed from err
         except HomecastError as err:
             _LOGGER.error("Failed to control device: %s", err)
+        await self.async_request_refresh()
 
     async def async_shutdown(self) -> None:
         """Disconnect WebSocket on shutdown."""

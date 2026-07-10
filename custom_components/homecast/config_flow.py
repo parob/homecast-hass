@@ -29,10 +29,6 @@ from .const import (
     DOMAIN,
     MODE_CLOUD,
     MODE_COMMUNITY,
-    OAUTH_AUTHORIZE_URL,
-    OAUTH_CLIENT_ID,
-    OAUTH_CLIENT_SECRET,
-    OAUTH_TOKEN_URL,
     SCOPES,
 )
 
@@ -58,7 +54,10 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
 
     @property
     def extra_authorize_data(self) -> dict[str, Any]:
-        """Extra data to include in the authorize URL."""
+        """Extra data to include in the authorize URL.
+
+        Homecast OAuth requires explicit scope to grant device control access.
+        """
         return {"scope": SCOPES}
 
     async def async_step_user(
@@ -142,9 +141,7 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
             step_id="community",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_API_URL, default="http://localhost:5656"
-                    ): str,
+                    vol.Required(CONF_API_URL, default="http://localhost:5656"): str,
                 }
             ),
             errors=errors,
@@ -206,7 +203,9 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
 
         _LOGGER.info("Homecast connected: found %d home(s)", len(state.homes))
 
-        unique_id = f"{DOMAIN}_community" if mode == MODE_COMMUNITY else DOMAIN
+        # Use the first home's ID as a stable per-account unique identifier
+        home_ids = sorted(home.home_id or home.key for home in state.homes.values())
+        unique_id = home_ids[0] if home_ids else api_url
         await self.async_set_unique_id(unique_id)
 
         if self.source == SOURCE_REAUTH:

@@ -1,0 +1,39 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This account is already configured.",
+      "already_in_progress": "Configuration flow is already in progress.",
+      "cannot_connect": "Failed to connect.",
+      "invalid_auth": "Invalid authentication.",
+      "oauth_error": "Error logging in with OAuth.",
+      "reauth_successful": "Re-authentication was successful.",
+      "unknown": "Unexpected error."
+    },
+    "create_entry": {
+      "default": "Connected to Homecast. Your HomeKit devices will appear shortly."
+    },
+    "step": {
+      "user": {
+        "title": "Connect to Homecast",
+        "menu_options": {
+          "cloud": "Homecast Cloud",
+          "community": "Homecast Community"
+        }
+      },
+      "community": {
+        "title": "Connect to Homecast Community",
+        "description": "Enter your Homecast server URL. You'll be asked to log in on your server.",
+        "data": {
+          "api_url": "Server URL"
+        }
+      },
+      "pick_implementation": {
+        "title": "Connect to Homecast"
+      },
+      "reauth_confirm": {
+        "description": "Your Homecast session has expired. Please re-authenticate to continue controlling your devices.",
+        "title": "Re-authenticate with Homecast"
+      }
+    }
+  }
+}

@@ -68,7 +68,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> 
     mode = entry.data.get(CONF_MODE)
     api_url = entry.data.get(CONF_API_URL, API_BASE_URL)
 
-    # Resolve OAuth implementation with correct server URLs
     authorize_url = entry.data.get(CONF_OAUTH_AUTHORIZE_URL, OAUTH_AUTHORIZE_URL)
     token_url = entry.data.get(CONF_OAUTH_TOKEN_URL, OAUTH_TOKEN_URL)
 
@@ -90,7 +89,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> 
     client = HomecastClient(session=http_session, api_url=api_url)
     client.authenticate(session.token[CONF_ACCESS_TOKEN])
 
-    # WebSocket push updates for real-time state sync
     device_id = f"ha_{entry.entry_id[:12]}"
     ws = HomecastWebSocket(
         session=http_session,
@@ -99,23 +97,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: HomecastConfigEntry) -> 
         community=(mode == MODE_COMMUNITY),
     )
 
-    async def _refresh_token() -> None:
+    async def _refresh_token() -> str:
+        """Refresh the OAuth token and return the new access token."""
         await session.async_ensure_token_valid()
         token = session.token[CONF_ACCESS_TOKEN]
         client.authenticate(token)
         if ws:
             ws.set_token(token)
+        return token
 
-    coordinator = HomecastCoordinator(hass, entry, client, _refresh_token, ws=ws)
+    coordinator = HomecastCoordinator(
+        hass,
+        entry,
+        client,
+        _refresh_token,
+        ws=ws,
+        initial_token=session.token[CONF_ACCESS_TOKEN],
+    )
 
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except ConfigEntryAuthFailed:
-        raise
-    except Exception as err:
-        raise ConfigEntryNotReady(
-            f"Could not fetch initial state from Homecast: {err}"
-        ) from err
+    await coordinator.async_config_entry_first_refresh()
 
     # Start WebSocket after initial state is available
     await coordinator.async_setup_websocket()
