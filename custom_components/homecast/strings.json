@@ -40,6 +40,10 @@
           "community": "Homecast Community"
         },
         "title": "Connect to Homecast"
+      },
+      "zeroconf_confirm": {
+        "description": "Set up the Homecast relay found at {url}?\n\nYou'll be asked to log in on your server.",
+        "title": "Homecast Community relay discovered"
       }
     }
   }

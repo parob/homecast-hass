@@ -18,6 +18,7 @@ from homeassistant.config_entries import SOURCE_REAUTH, ConfigFlowResult
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_TOKEN
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.config_entry_oauth2_flow import AbstractOAuth2FlowHandler
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .application_credentials import authorization_server_context
 from .const import (
@@ -46,6 +47,7 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
         """Initialize the flow handler."""
         super().__init__()
         self._community_data: dict[str, Any] | None = None
+        self._discovered_url: str | None = None
 
     @property
     def logger(self) -> logging.Logger:
@@ -93,6 +95,44 @@ class HomecastFlowHandler(AbstractOAuth2FlowHandler, domain=DOMAIN):
             ),
         )
         return await super().async_step_user(user_input)
+
+    async def async_step_zeroconf(
+        self, discovery_info: ZeroconfServiceInfo
+    ) -> ConfigFlowResult:
+        """A Homecast Community relay announced itself on the network.
+
+        The relay publishes `_homecast._tcp` with a TXT record carrying a
+        stable id — stable across renames and new DHCP leases, which is what
+        stops a relay that moved address being offered as a second
+        integration. Older relays publish no TXT at all, so fall back to the
+        Bonjour instance name.
+        """
+        properties = discovery_info.properties or {}
+        instance_id = properties.get("id") or discovery_info.name.split(".")[0]
+
+        await self.async_set_unique_id(f"community:{instance_id}")
+        host = discovery_info.host
+        port = discovery_info.port or 5656
+        api_url = f"http://{host}:{port}"
+        self._abort_if_unique_id_configured(updates={CONF_API_URL: api_url})
+
+        self._discovered_url = api_url
+        self.context["title_placeholders"] = {
+            "name": discovery_info.name.split(".")[0],
+        }
+        return await self.async_step_zeroconf_confirm()
+
+    async def async_step_zeroconf_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm the discovered relay, then run the normal community flow."""
+        if user_input is not None:
+            return await self.async_step_community({CONF_API_URL: self._discovered_url})
+
+        return self.async_show_form(
+            step_id="zeroconf_confirm",
+            description_placeholders={"url": self._discovered_url or ""},
+        )
 
     async def async_step_community(
         self, user_input: dict[str, Any] | None = None

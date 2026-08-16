@@ -1,14 +1,25 @@
 {
   "domain": "homecast",
   "name": "Homecast",
-  "codeowners": ["@parob"],
+  "codeowners": [
+    "@parob"
+  ],
   "config_flow": true,
-  "dependencies": ["application_credentials"],
+  "dependencies": [
+    "application_credentials"
+  ],
   "documentation": "https://docs.homecast.cloud/guides/home-assistant",
   "integration_type": "hub",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/parob/homecast-hass/issues",
-  "loggers": ["pyhomecast"],
-  "requirements": ["pyhomecast==0.3.0"],
-  "version": "0.3.0"
+  "loggers": [
+    "pyhomecast"
+  ],
+  "requirements": [
+    "pyhomecast==0.3.0"
+  ],
+  "version": "0.4.0",
+  "zeroconf": [
+    "_homecast._tcp.local."
+  ]
 }
