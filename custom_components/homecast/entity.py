@@ -49,6 +49,39 @@ class HomecastEntity(CoordinatorEntity[HomecastCoordinator]):
         """Return the current device data from the coordinator."""
         return self.coordinator.data.devices.get(self._device_id)
 
+    def state_value(self, *keys: str) -> Any:
+        """The first of `keys` the accessory reports, or None.
+
+        Homecast reports properties under the names set_state accepts
+        (`target`, `speed`, `hvac_mode`). A Community relay running an older
+        bundle still reports a few under HomeKit's own names
+        (`target_position`, `rotation_speed`, `target_heater_cooler_state`), so
+        callers pass the current name first and the legacy one after it.
+        """
+        device = self.device
+        if device is None:
+            return None
+        for key in keys:
+            value = device.state.get(key)
+            if value is not None:
+                return value
+        return None
+
+    def settable(self, *keys: str) -> bool:
+        """True if any of `keys` is writable on this accessory."""
+        device = self.device
+        return device is not None and any(k in device.settable for k in keys)
+
+    def valid_options(self, key: str) -> list[Any] | None:
+        """The values the accessory accepts for `key`, when Homecast says."""
+        device = self.device
+        if device is None:
+            return None
+        options = device.state.get("_options")
+        if isinstance(options, dict) and isinstance(options.get(key), list):
+            return options[key]
+        return None
+
     @property
     def available(self) -> bool:
         """Return True if the device is available."""

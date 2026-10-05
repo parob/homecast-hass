@@ -24,6 +24,12 @@ _ALARM_STATE_MAP: dict[str, AlarmControlPanelState] = {
     "triggered": AlarmControlPanelState.TRIGGERED,
 }
 
+_ARM_FEATURES: dict[str, AlarmControlPanelEntityFeature] = {
+    "home": AlarmControlPanelEntityFeature.ARM_HOME,
+    "away": AlarmControlPanelEntityFeature.ARM_AWAY,
+    "night": AlarmControlPanelEntityFeature.ARM_NIGHT,
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -49,11 +55,14 @@ class HomecastAlarm(HomecastEntity, AlarmControlPanelEntity):
 
     @property
     def supported_features(self) -> AlarmControlPanelEntityFeature:
-        return (
-            AlarmControlPanelEntityFeature.ARM_HOME
-            | AlarmControlPanelEntityFeature.ARM_AWAY
-            | AlarmControlPanelEntityFeature.ARM_NIGHT
-        )
+        # A security system that cannot arm for the night says so in
+        # `_options.alarm_target`; offer only what it accepts.
+        options = self.valid_options("alarm_target")
+        features = AlarmControlPanelEntityFeature(0)
+        for word, feature in _ARM_FEATURES.items():
+            if options is None or word in options:
+                features |= feature
+        return features
 
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:

@@ -31,12 +31,13 @@ Homecast acts as a bridge between Apple HomeKit and open standards. The Homecast
 
 ### Via HACS (recommended)
 
-1. Open HACS in your Home Assistant instance
-2. Go to **Integrations** > **Custom repositories**
-3. Add this repository URL: `https://github.com/parob/homecast-hass`
-4. Select **Integration** as the category
-5. Click **Add**, then find **Homecast** in the integration list and click **Download**
-6. Restart Home Assistant
+Homecast is not in the HACS default list yet, so add it as a custom repository first:
+
+1. Open **HACS** in your Home Assistant sidebar
+2. Click the **⋮** menu in the top right corner and choose **Custom repositories**
+3. Enter `https://github.com/parob/homecast-hass` as the repository and choose **Integration** as the type, then click **Add**
+4. Search HACS for **Homecast**, open it and click **Download**
+5. Restart Home Assistant
 
 ### Manual
 
@@ -55,29 +56,36 @@ No manual OAuth client registration is needed — the integration registers itse
 
 ## Supported devices
 
-| HomeKit Device | Home Assistant Platform | Controls |
+| HomeKit service | Home Assistant entity | What you get |
 |---|---|---|
-| Lightbulb | Light | On/off, brightness, color (HS), color temperature |
+| Lightbulb | Light | On/off, brightness, colour (hue/saturation), colour temperature |
 | Switch | Switch | On/off |
-| Outlet | Switch | On/off |
-| Thermostat / Heater-Cooler | Climate | HVAC mode, target temperature, temperature range |
+| Outlet | Switch (outlet) | On/off |
+| Heater-Cooler (air conditioners, most radiators and underfloor heating) | Climate | Off plus the modes the unit supports (heat/cool/auto, from HomeKit), the setpoint for the current mode or a heat–cool range in auto, current temperature and humidity, heating/cooling/idle action, swing on/off |
+| Thermostat | Climate | The modes the thermostat supports (off/heat/cool/auto), target temperature, current temperature, heating/cooling action |
 | Lock | Lock | Lock / unlock |
-| Window Covering / Blind | Cover | Position (0-100%), open/close |
-| Fan | Fan | On/off, speed percentage |
-| Security System | Alarm Control Panel | Arm home/away/night, disarm |
-| Motion Sensor | Binary Sensor | Motion detected |
-| Contact Sensor | Binary Sensor | Open/closed |
-| Temperature Sensor | Sensor | Current temperature (Celsius) |
-| Light Sensor | Sensor | Illuminance (lux) |
-| Battery (any device) | Sensor | Battery level (%) |
-| Low Battery (any device) | Binary Sensor | Battery low warning |
+| Window Covering | Cover (blind) | Position 0–100 %, open/close, opening/closing |
+| Fan and Fan v2 | Fan | On/off, speed percentage |
+| Security System | Alarm control panel | Arm home/away/night (whichever the system supports), disarm |
+| Motion Sensor | Binary sensor (motion) | Motion detected |
+| Contact Sensor | Binary sensor (door) | Open/closed |
+| Occupancy, Leak, Smoke, Carbon Monoxide sensors | Binary sensor | Detected / clear |
+| Temperature Sensor | Sensor | Temperature (°C) |
+| Light Sensor | Sensor | Illuminance (lx) |
+| Humidity reading | Sensor | Relative humidity (%) |
+| Battery (any accessory) | Sensor + binary sensor (diagnostic) | Battery level (%) and battery low |
+| Service groups (e.g. a room's lights) | The group's type | Controls every member at once |
+
+An accessory that combines several sensors keeps all of their readings: a Hue motion sensor becomes a motion sensor with temperature, illuminance and battery entities on the same device.
+
+Not supported yet: garage door openers, air purifiers, humidifiers, valves and irrigation, speakers and TVs, cameras and doorbells, HomeKit scenes, and fan speed on an air conditioner.
 
 ## How devices appear
 
-- Each HomeKit accessory becomes a **device** in the Home Assistant device registry
-- Devices are automatically placed in **areas** matching their HomeKit room names
-- Each Homecast home appears as a hub device
-- Device names and types are derived from the HomeKit data
+- Each HomeKit accessory (and each HomeKit service group) becomes a **device** in the Home Assistant device registry
+- Devices are placed in the **area** matching their HomeKit room when they are first added. With more than one home, the area is named `Home - Room`
+- Names are derived from the accessory's Homecast key, so capitalisation and punctuation are not preserved (`TV` becomes `Tv`). Rename them in Home Assistant if that matters
+- Accessories added to HomeKit later appear after reloading the integration
 
 ## Configuration
 
@@ -102,8 +110,8 @@ If you authorized Home Assistant with view-only permissions during OAuth setup, 
 
 ### Stale state
 
-- State changes are pushed over WebSocket within a few seconds
-- A full refresh runs every 5 minutes as a safety net
+- State changes are pushed over a WebSocket
+- A full refresh runs every 5 minutes as a safety net, and whenever a relay goes offline or comes back
 - If state seems stuck, check that the relay app is online
 
 ### Re-authentication
@@ -133,6 +141,16 @@ The integration communicates with Homecast via:
 - **WebSocket** — Real-time state push (`characteristic_update`, `service_group_update`)
 - **`POST /rest/scene`** — Execute scenes (future)
 - **OAuth 2.1** — Authentication with PKCE and refresh tokens
+
+### Tests
+
+```bash
+uv venv --python 3.14 .venv
+uv pip install --python .venv/bin/python -r requirements_test.txt
+.venv/bin/python -m pytest
+```
+
+The tests set the integration up against recorded `GET /rest/state` answers in `tests/fixtures/` and check what every entity reports and what each service call sends.
 
 ## License
 
