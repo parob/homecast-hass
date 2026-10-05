@@ -29,45 +29,55 @@ async def async_setup_entry(
 
 
 class HomecastFan(HomecastEntity, FanEntity):
-    """Represents a Homecast fan."""
+    """Represents a Homecast fan.
+
+    HomeKit has two fan services: the original Fan switches with `on`, the newer
+    Fan v2 with `active`. Whichever the accessory reports is the one driven.
+    """
 
     _attr_name = None
 
     @property
+    def _power_key(self) -> str:
+        device = self.device
+        if device is not None and "on" not in device.state and "active" in device.state:
+            return "active"
+        return "on"
+
+    @property
     def supported_features(self) -> FanEntityFeature:
         features = FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
-        device = self.device
-        if device and "speed" in device.settable:
+        if self.settable("speed", "rotation_speed"):
             features |= FanEntityFeature.SET_SPEED
         return features
 
     @property
     def is_on(self) -> bool | None:
-        device = self.device
-        if device is None:
-            return None
-        return device.state.get("on")
+        value = self.state_value(self._power_key)
+        return None if value is None else bool(value)
 
     @property
     def percentage(self) -> int | None:
         """Return speed percentage (Homecast uses 0-100, same as HA)."""
-        device = self.device
-        if device is None:
-            return None
-        return device.state.get("speed")
+        speed = self.state_value("speed", "rotation_speed")
+        return None if speed is None else round(speed)
 
     async def async_turn_on(
         self,
         percentage: int | None = None,
+        preset_mode: str | None = None,
         **kwargs: Any,
     ) -> None:
-        payload: dict[str, Any] = {"on": True}
+        payload: dict[str, Any] = {self._power_key: True}
         if percentage is not None:
             payload["speed"] = percentage
         await self._async_set_state(payload)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self._async_set_state({"on": False})
+        await self._async_set_state({self._power_key: False})
 
     async def async_set_percentage(self, percentage: int) -> None:
+        if percentage == 0:
+            await self.async_turn_off()
+            return
         await self._async_set_state({"speed": percentage})

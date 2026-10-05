@@ -25,9 +25,10 @@ from .const import DOMAIN, UPDATE_INTERVAL, UPDATE_INTERVAL_WS
 
 _LOGGER = logging.getLogger(__name__)
 
-# Map relay characteristic types to pyhomecast state keys.
-# The relay sends friendly names (e.g. "brightness") which the server passes
-# through in broadcasts. CHAR_TO_SIMPLE maps these to REST API state keys.
+# Map relay characteristic types (what a `characteristic_update` broadcast
+# carries) to the keys GET /rest/state reports them under. A characteristic not
+# listed here is reported under its own name, so an update to it is applied
+# under that name if the accessory already has it.
 CHAR_TO_STATE_KEY: dict[str, str] = {
     "on": "on",
     "power_state": "on",
@@ -50,7 +51,44 @@ CHAR_TO_STATE_KEY: dict[str, str] = {
     "status_low_battery": "low_battery",
     "volume": "volume",
     "mute": "mute",
+    "rotation_speed": "speed",
+    "target_position": "target",
+    "target_heater_cooler_state": "hvac_mode",
+    "current_heater_cooler_state": "hvac_state",
 }
+
+# Broadcasts carry HomeKit's raw values; GET /rest/state reports these as words
+# or booleans. Convert so a pushed update reads the same as a polled one.
+_ENUM_WORDS: dict[str, dict[int, str]] = {
+    "alarm_state": {0: "home", 1: "away", 2: "night", 3: "off", 4: "triggered"},
+    "alarm_target": {0: "home", 1: "away", 2: "night", 3: "off"},
+    "hvac_state": {0: "inactive", 1: "idle", 2: "heating", 3: "cooling"},
+    "hvac_mode": {0: "auto", 1: "heat", 2: "cool"},
+}
+_BOOLEANS = {"on", "active", "motion", "mute", "low_battery"}
+
+
+def state_key_for(char_type: str, state: dict[str, Any]) -> str | None:
+    """The state key a broadcast for `char_type` updates on this accessory."""
+    key = CHAR_TO_STATE_KEY.get(char_type)
+    if key is not None:
+        return key
+    # Reported under its own name: current_position, position_state,
+    # current_ambient_light_level, relative_humidity, swing_mode, ...
+    return char_type if char_type in state else None
+
+
+def format_state_value(key: str, value: Any) -> Any:
+    """A broadcast value in the form GET /rest/state reports it."""
+    if value is None:
+        return None
+    if key in _ENUM_WORDS and isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _ENUM_WORDS[key].get(int(value), f"unknown_{value}")
+    if key == "locked":
+        return value == 1 if isinstance(value, (int, float)) else bool(value)
+    if key in _BOOLEANS:
+        return bool(value)
+    return value
 
 
 class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
@@ -143,9 +181,11 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
                     group = self.data.devices.get(group_key)
                     if group:
                         char_type = message.get("characteristicType", "")
-                        state_key = CHAR_TO_STATE_KEY.get(char_type)
+                        state_key = state_key_for(char_type, group.state)
                         if state_key:
-                            group.state[state_key] = message.get("value")
+                            group.state[state_key] = format_state_value(
+                                state_key, message.get("value")
+                            )
                             self.async_set_updated_data(self.data)
         elif msg_type == "service_group_update":
             # Update the group entity itself
@@ -161,8 +201,10 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
         elif msg_type == "reachability_update":
             self.hass.async_create_task(self.async_request_refresh())
         elif msg_type == "relay_status_update":
-            if not message.get("connected", True):
-                self.hass.async_create_task(self.async_request_refresh())
+            # Both ways: a relay going offline takes its homes' accessories
+            # with it, and one coming back has to bring them back — otherwise
+            # they stayed unavailable until the next five-minute poll.
+            self.hass.async_create_task(self.async_request_refresh())
 
     def _apply_state_update(
         self,
@@ -186,11 +228,11 @@ class HomecastCoordinator(DataUpdateCoordinator[HomecastState]):
         if not device:
             return None
 
-        state_key = CHAR_TO_STATE_KEY.get(char_type)
+        state_key = state_key_for(char_type, device.state)
         if not state_key:
             return None
 
-        device.state[state_key] = value
+        device.state[state_key] = format_state_value(state_key, value)
         self.async_set_updated_data(self.data)
         return device_key
 

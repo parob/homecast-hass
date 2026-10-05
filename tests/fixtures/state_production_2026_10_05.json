@@ -1,0 +1,26 @@
+{
+  "_comment": "Real GET /rest/state answers from production, 2026-10-05, trimmed to one of each kind, with the home renamed. This is the shape a server or Community relay WITHOUT the get_state vocabulary fix still returns: target_position, rotation_speed, target_heater_cooler_state (an integer), no battery.",
+  "my_home_bcab": {
+    "kitchen_9c55": {
+      "kitchen_air_conditioner_6428": {"type": "climate", "target_heater_cooler_state": 2, "heat_target": 26, "current_heater_cooler_state": 0, "current_temp": 22, "cool_target": 26, "active": false, "_settable": ["target_heater_cooler_state", "heat_target", "cool_target", "active"], "name": "my_home_bcab.kitchen_9c55.kitchen_air_conditioner_6428"},
+      "kitchen_underfloor_heating_e05e": {"type": "climate", "heat_target": 7.5, "target_heater_cooler_state": 1, "current_heater_cooler_state": 0, "current_temp": 20.4, "active": false, "relative_humidity": 65.19, "_settable": ["heat_target", "target_heater_cooler_state", "active"], "name": "my_home_bcab.kitchen_9c55.kitchen_underfloor_heating_e05e"}
+    },
+    "annex_4e44": {
+      "annex_air_conditioner_f9a9": {"type": "climate", "target_heater_cooler_state": 2, "swing_mode": 1, "heat_target": 20, "rotation_speed": 34, "active": false, "cool_target": 20, "current_temp": 19, "current_heater_cooler_state": 1, "_settable": ["target_heater_cooler_state", "swing_mode", "heat_target", "rotation_speed", "active", "cool_target"], "name": "my_home_bcab.annex_4e44.annex_air_conditioner_f9a9"}
+    },
+    "living_room_4b2d": {
+      "eve_motionblinds_0b7e": {"type": "blind", "position_state": 2, "current_position": 0, "target_position": 0, "_settable": ["target_position"], "name": "my_home_bcab.living_room_4b2d.eve_motionblinds_0b7e"},
+      "hue_essential_spot_19_fa96": {"type": "light", "color_temp": 345, "on": false, "brightness": 28, "saturation": 67, "hue": 48, "_settable": ["color_temp", "on", "brightness", "saturation", "hue"], "name": "my_home_bcab.living_room_4b2d.hue_essential_spot_19_fa96"},
+      "front_door_sensor_91ae": {"type": "contact", "contact": 0, "name": "my_home_bcab.living_room_4b2d.front_door_sensor_91ae"}
+    },
+    "garden_6055": {
+      "hue_outdoor_motion_sensor_6d19": {"type": "motion", "motion": false, "current_ambient_light_level": 984, "current_temp": 15.8, "name": "my_home_bcab.garden_6055.hue_outdoor_motion_sensor_6d19"}
+    },
+    "front_door_19b2": {
+      "aqara_smart_lock_u200_21de": {"type": "lock", "locked": true, "name": "my_home_bcab.front_door_19b2.aqara_smart_lock_u200_21de"}
+    },
+    "_scenes": ["All lights off test"]
+  },
+  "_homes": {"my_home_bcab": "A1B2C3D4-0000-5000-8000-00000000BCAB"},
+  "_meta": {"fetched_at": "2026-10-05T10:08:43+00:00", "message": "Found 8 accessories across 1 home"}
+}
